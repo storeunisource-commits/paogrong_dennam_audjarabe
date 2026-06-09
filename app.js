@@ -463,9 +463,10 @@ async function showCardDetail(cardType) {
   if (!r.success) { showToast(r.error, 'error'); return; }
 
   const labels = { done:'ทำแล้ว', not_done:'ยังไม่ทำ', called:'โทรแจ้งแล้ว',
-                   late:'เกินกำหนด', warned:'ใบเตือน', pending_approval:'รออนุมัติ' };
+                   late:'เกินกำหนด', warned:'ใบเตือน', pending_approval:'รออนุมัติ', stopped:'หยุดรถ' };
   const data = r.data || [];
 
+  const isViolationCard = ['warned', 'pending_approval', 'stopped'].includes(cardType);
   const rows = data.map(item => `
     <tr>
       <td>${item.truckNumber || '-'}</td>
@@ -473,6 +474,7 @@ async function showCardDetail(cardType) {
       <td>${item.weekLabel || item.round || '-'}</td>
       <td>${item.status || item.docStatus || '-'}</td>
       <td style="font-size:11px">${fmtDT(item.createdAt)}</td>
+      ${isViolationCard ? `<td><button class="btn-ghost btn-sm" onclick="doShowWarning('${item.id}')">ดูหนังสือ</button></td>` : ''}
     </tr>
   `).join('');
 
@@ -484,7 +486,7 @@ async function showCardDetail(cardType) {
     <div class="modal-body">
       ${!data.length ? '<div class="empty"><p>ไม่มีข้อมูล</p></div>' : `
         <div class="table-wrap"><table>
-          <thead><tr><th>รถ</th><th>ประเภท</th><th>รอบ</th><th>สถานะ</th><th>วันที่</th></tr></thead>
+          <thead><tr><th>รถ</th><th>ประเภท</th><th>รอบ</th><th>สถานะ</th><th>วันที่</th>${isViolationCard ? '<th></th>' : ''}</tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
       `}
@@ -1103,7 +1105,7 @@ function openAckForm(violationId) {
   openModal(`
     <div class="modal-header">
       <span class="modal-title">✅ ยืนยันรับทราบ</span>
-      <button class="modal-close" onclick="closeModal()">?</button>
+      <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
       <div class="info-box blue" style="margin-bottom:12px">
