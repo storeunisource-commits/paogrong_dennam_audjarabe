@@ -2,7 +2,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwOk9pwKCZKTJPIMvw42A6X0crU3e0TWPXJpdUA_EbY37Q8YUQKQh5Kb9t6Y4CTHsWTFQ/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxrD3qLSGbu1EwPPAeo2fdMgSkxsJigdLTvW47W04TIdULbNu0BUvL1k2dYGrkfp4wDpQ/exec';
 const WEEK_LABELS_FILTER = ['Week1/1','Week1/2','Week2/1','Week2/2','Week3/1','Week3/2','Week4/1','Week4/2'];
 const WEEK_LABELS_GREASE = ['รอบ1','รอบ2'];
 const ROLE_ORDER = { viewer:0, operation:1, manager:2, admin:3 };
@@ -40,6 +40,7 @@ const NAV_ITEMS = [
   { id:'vio-history',     label:'📁 ประวัติใบเตือน', minRole:'operation' },
   { id:'good-employees',  label:'⭐ พนักงานทำดี',    minRole:'operation' },
   { id:'line-notify',     label:'📣 แจ้งกลุ่มไลน์', minRole:'operation' },
+  { id:'warned-employees',label:'⚠️ พนักงานโดนเตือน', minRole:'operation' },
   { id:'track-status',    label:'🔍 ติดตามสถานะ',   minRole:'operation' },
   { id:'settings',        label:'⚙️ ตั้งค่า',        minRole:'operation' },
 ];
@@ -240,6 +241,7 @@ async function renderPage(page) {
     case 'history':        await renderHistory(content);        break;
     case 'vio-history':    await renderVioHistory(content);     break;
     case 'good-employees': await renderGoodEmployees(content);  break;
+    case 'warned-employees': await renderWarnedEmployees(content); break;
     case 'line-notify':    await renderLineNotify(content);     break;
     case 'track-status':   await renderTrackStatus(content);    break;
     case 'settings':       await renderSettings(content);       break;
@@ -265,7 +267,7 @@ async function renderDashboard(container) {
     return;
   }
 
-  const { stats, rows, activities } = r.data;
+  const { stats, rows, activities, stoppedTrucks = [] } = r.data;
   const thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
   container.innerHTML = `
@@ -282,8 +284,27 @@ async function renderDashboard(container) {
       ${mkStatCard('called',  'yellow', '📞 โทรแจ้งแล้ว',      stats.called          ?? 0)}
       ${mkStatCard('late',    'orange', '⏰ เกินกำหนด',        stats.late            ?? 0)}
       ${mkStatCard('warned',  'orange', '⚠️ ใบเตือน',           stats.warned          ?? 0)}
+      ${mkStatCard('stopped', 'red', '\u26d4 \u0e2b\u0e22\u0e38\u0e14\u0e23\u0e16', stats.stopped ?? 0)}
       ${mkStatCard('pending_approval','blue','🕐 รออนุมัติ',    stats.pendingApproval ?? 0)}
     </div>
+
+    ${stoppedTrucks.length ? `
+      <div class="card stopped-card" style="margin-bottom:16px;border-left:4px solid var(--red)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="card-title" style="margin-bottom:0">⛔ รถที่ถูกสั่งหยุด</div>
+          <button class="btn btn-outline btn-sm" onclick="showCardDetail('stopped')">ดูรายละเอียด</button>
+        </div>
+        <div class="stopped-list">
+          ${stoppedTrucks.map(v => `
+            <button class="stopped-item" onclick="showTruckDetail('${v.truckNumber}')">
+              <strong>${v.truckNumber}</strong>
+              <span>${v.type || '-'}</span>
+              <small>${v.weekLabel || '-'} · ระดับ ${v.punishmentLevel || '-'}</small>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     <div class="card" style="overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -388,16 +409,18 @@ function renderTruckRow(row) {
   const fw   = row.filterByWeek || {};
   const dw   = row.drainByWeek  || {};
   const gw   = row.greaseByWeek || {};
+  const stopBadge = row.isStopped ? '<span class="status-badge badge-red" style="margin-left:4px">หยุดรถ</span>' : '';
 
   const dot = (st) => {
     const cls = WDOT_CLASS[st] || 'wdot-empty';
-    return `<span class="wdot ${cls}" title="${st || 'ไม่มีข้อมูล'}"></span>`;
+    const title = st || 'ไม่มีข้อมูล';
+    return `<span class="wdot ${cls}" title="${title}" onclick="showTruckDetail('${row.truckNumber}')"></span>`;
   };
 
   return `
-    <tr>
+    <tr class="${row.isStopped ? 'truck-row-stopped' : ''}">
       <td>
-        <span class="truck-link" onclick="showTruckDetail('${row.truckNumber}')">${row.truckNumber}</span>
+        <span class="truck-link" onclick="showTruckDetail('${row.truckNumber}')">${row.truckNumber}</span>${stopBadge}
       </td>
       <td style="font-size:12px;white-space:nowrap">${nick}</td>
       ${WEEK_LABELS_FILTER.map(wl=>`<td class="week-cell">${dot(fw[wl]?.status)}</td>`).join('')}
@@ -407,6 +430,7 @@ function renderTruckRow(row) {
     </tr>
   `;
 }
+
 
 async function dashPrevMonth() {
   S.dashMonth--; if (S.dashMonth < 1) { S.dashMonth = 12; S.dashYear--; }
@@ -937,6 +961,7 @@ async function submitViolationForm() {
 
   if (!truck)  { showToast('กรุณาเลือกรถ', 'error'); return; }
   if (!type)   { showToast('กรุณาเลือกประเภทการละเลย', 'error'); return; }
+  if (!week)   { showToast('\u0e01\u0e23\u0e38\u0e13\u0e32\u0e40\u0e25\u0e37\u0e2d\u0e01\u0e23\u0e2d\u0e1a\u0e17\u0e35\u0e48\u0e25\u0e30\u0e40\u0e25\u0e22', 'error'); return; }
   if (!reason) { showToast('กรุณาระบุเหตุผล', 'error'); return; }
 
   const empId = truckSel.options[truckSel.selectedIndex]?.dataset?.emp || '';
@@ -1062,26 +1087,30 @@ async function doApprove(violationId) {
 }
 
 async function doShowWarning(violationId) {
+  const popup = window.open('', '_blank');
+  if (popup) popup.document.write('<p style="font-family:Sarabun,Arial;padding:24px">กำลังเปิดหนังสือ...</p>');
   showLoading(true);
   const r = await callGAS('getWarningLetterPdf', S.token, violationId);
   showLoading(false);
-  if (!r.success) { showToast(r.error, 'error'); return; }
-  if (!r.url) { showToast('ไม่พบ PDF', 'error'); return; }
-  window.open(r.url, '_blank');
+  if (!r.success) { if (popup) popup.close(); showToast(r.error, 'error'); return; }
+  if (!r.url || !/^https?:\/\//.test(r.url)) { if (popup) popup.close(); showToast('ไม่พบ PDF', 'error'); return; }
+  if (popup) popup.location.href = r.url;
+  else window.open(r.url, '_blank');
 }
+
 
 function openAckForm(violationId) {
   openModal(`
     <div class="modal-header">
-      <span class="modal-title">✍️ ยืนยันรับทราบ</span>
-      <button class="modal-close" onclick="closeModal()">×</button>
+      <span class="modal-title">✅ ยืนยันรับทราบ</span>
+      <button class="modal-close" onclick="closeModal()">?</button>
     </div>
     <div class="modal-body">
       <div class="info-box blue" style="margin-bottom:12px">
-        พนักงานลงนามรับทราบหนังสือเตือน — แนบรูปหลักฐาน (ไม่บังคับ)
+        แนบรูปหลักฐานการรับทราบ ระบบจะสร้างหน้าที่ 2 ของหนังสือเป็นหลักฐานอัตโนมัติ
       </div>
       <div class="form-group">
-        <label class="form-label">รูปหลักฐาน (หลายรูปได้)</label>
+        <label class="form-label required">รูปหลักฐาน</label>
         <div class="photo-zone" onclick="document.getElementById('ack-photos').click()">
           📷 คลิกเพื่อเลือกรูปหลักฐาน
         </div>
@@ -1089,6 +1118,7 @@ function openAckForm(violationId) {
                onchange="previewPhotos(this,'ack-preview')">
         <div class="photo-previews" id="ack-preview"></div>
       </div>
+      <div class="form-hint">เมื่อกดยืนยัน PDF ฉบับรับทราบจะมีหน้าที่ 2 พร้อมรูปหลักฐาน</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
@@ -1097,9 +1127,11 @@ function openAckForm(violationId) {
   `);
 }
 
+
 async function submitAck(violationId) {
   const files    = Array.from(document.getElementById('ack-photos').files);
-  const filesData = files.length ? await filesToBase64(files) : [];
+  if (!files.length) { showToast('กรุณาอัปโหลดรูปหลักฐาน', 'error'); return; }
+  const filesData = await filesToBase64(files);
 
   showLoading(true);
   closeModal();
@@ -1138,10 +1170,10 @@ async function renderHistory(container) {
         </select>
         <label>เดือน</label>
         <input type="number" id="hist-month" class="form-control" style="width:60px"
-               value="${now.getMonth()+1}" min="1" max="12">
+               placeholder="ทั้งหมด" min="1" max="12">
         <label>ปี</label>
         <input type="number" id="hist-year" class="form-control" style="width:75px"
-               value="${now.getFullYear()}">
+               placeholder="ทั้งหมด">
         <button class="btn btn-primary btn-sm" onclick="loadHistory()">🔍 ค้นหา</button>
       </div>
       <div id="hist-results"><div class="empty"><div class="spinner"></div></div></div>
@@ -1449,6 +1481,85 @@ async function showGoodEmpDetail(employeeId) {
 }
 
 // ============================================================
+// WARNED EMPLOYEES PAGE
+// ============================================================
+async function renderWarnedEmployees(container) {
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-title">⚠️ พนักงานที่โดนหนังสือเตือน</div>
+      <div id="we-loading"><div class="empty"><div class="spinner"></div></div></div>
+      <div id="we-content" style="display:none"></div>
+    </div>
+  `;
+  const r = await callGAS('getWarnedEmployees', S.token);
+  const loadEl = document.getElementById('we-loading');
+  const cntEl = document.getElementById('we-content');
+  if (loadEl) loadEl.style.display = 'none';
+  if (!cntEl) return;
+  if (!r.success) { cntEl.innerHTML = `<div class="empty"><p style="color:var(--red)">${r.error}</p></div>`; cntEl.style.display = ''; return; }
+  const data = r.data || [];
+  if (!data.length) { cntEl.innerHTML = '<div class="empty"><p>ยังไม่มีพนักงานที่โดนหนังสือเตือน</p></div>'; cntEl.style.display = ''; return; }
+  const medals = ['🥇','🥈','🥉'];
+  const top3Html = data.slice(0,3).map((emp,i)=>`
+    <div class="warn-rank-card" onclick="showWarnedEmpDetail('${emp.employeeId}')">
+      <div style="font-size:32px">${medals[i] || i+1}</div>
+      <div style="font-size:16px;font-weight:700;margin-top:6px">${emp.nickname || emp.employeeId}</div>
+      <div style="font-size:12px;color:#666;margin-top:2px">${emp.fullName || '-'}</div>
+      <div style="margin-top:8px;font-size:18px;color:var(--red);font-weight:700">${emp.vioTotal} ครั้ง</div>
+      <div style="font-size:11px;color:#999;margin-top:4px">ล่าสุด ${emp.lastVioAt ? fmtDT(emp.lastVioAt) : '-'}</div>
+    </div>`).join('');
+  const tableHtml = data.map((emp,i)=>`
+    <tr style="cursor:pointer" onclick="showWarnedEmpDetail('${emp.employeeId}')">
+      <td style="text-align:center;font-size:15px">${medals[i] || (i+1)}</td>
+      <td style="font-weight:600">${emp.nickname || '-'}</td>
+      <td style="font-size:12px;color:#666">${emp.fullName || '-'}</td>
+      <td style="text-align:center;font-weight:700;color:var(--red)">${emp.vioTotal}</td>
+      <td style="text-align:center">${emp.stopTotal || 0}</td>
+      <td style="font-size:11px;color:#999">${emp.lastVioAt ? fmtDT(emp.lastVioAt) : '-'}</td>
+    </tr>`).join('');
+  cntEl.innerHTML = `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px">${top3Html}</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>ชื่อเล่น</th><th>ชื่อ-สกุล</th><th>ใบเตือน</th><th>สั่งหยุด</th><th>ล่าสุด</th></tr></thead>
+      <tbody>${tableHtml}</tbody>
+    </table></div>`;
+  cntEl.style.display = '';
+}
+
+async function showWarnedEmpDetail(employeeId) {
+  openModal(`
+    <div class="modal-header"><span class="modal-title">⚠️ รายละเอียดพนักงานโดนเตือน</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body" id="we-detail-body"><div class="empty"><div class="spinner"></div></div></div>
+  `, 'modal-lg');
+  const r = await callGAS('getViolationLogs', S.token, { employeeId });
+  const body = document.getElementById('we-detail-body');
+  if (!body) return;
+  if (!r.success) { body.innerHTML = `<div class="empty"><p style="color:var(--red)">${r.error}</p></div>`; return; }
+  const vios = (r.data || []).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const emp = vios[0]?.employee || {};
+  body.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:40px">⚠️</div>
+      <div style="font-size:18px;font-weight:700">${emp.nickname || employeeId}</div>
+      <div style="font-size:13px;color:#666">${emp.fullName || ''}</div>
+      <div style="font-size:11px;color:#999">${employeeId}</div>
+    </div>
+    ${!vios.length ? '<div class="empty"><p>ไม่พบประวัติใบเตือน</p></div>' : `
+      <div class="table-wrap"><table>
+        <thead><tr><th>รถ</th><th>ประเภท</th><th>รอบ</th><th>ระดับ</th><th>สถานะ</th><th>วันที่</th><th></th></tr></thead>
+        <tbody>${vios.map(v=>`
+          <tr>
+            <td>${v.truckNumber || '-'}</td><td>${v.type || '-'}</td><td>${v.weekLabel || '-'}</td>
+            <td style="text-align:center">${v.punishmentLevel || '-'}</td>
+            <td>${v.stopOrder ? '<span class="status-badge badge-red">หยุดรถ</span>' : (v.docStatus || '-')}</td>
+            <td style="font-size:11px;white-space:nowrap">${fmtDT(v.createdAt)}</td>
+            <td><button class="btn-ghost btn-sm" onclick="doShowWarning('${v.id}')">📄</button></td>
+          </tr>`).join('')}</tbody>
+      </table></div>`}
+  `;
+}
+
+// ============================================================
 // SETTINGS
 // ============================================================
 async function renderSettings(container) {
@@ -1697,25 +1808,23 @@ async function settingsSignature(el) {
   showLoading(true);
   const r = await callGAS('getMyProfile', S.token);
   showLoading(false);
-  const sigUrl = r.success ? (r.data?.signatureUrl || '') : '';
+  const sigUrl = r.success ? (r.data?.signatureDataUrl || r.data?.signatureUrl || '') : '';
 
   el.innerHTML = `
-    <div style="max-width:420px">
+    <div style="max-width:520px">
       <h4 style="margin-bottom:12px;color:var(--navy)">ลายเซ็นต์ของฉัน (${S.user?.name})</h4>
-
       <div id="sig-current" style="margin-bottom:16px">
         ${sigUrl
-          ? `<div style="background:#f8f9fa;border:2px dashed #dee2e6;border-radius:10px;padding:16px;display:inline-block;margin-bottom:10px;min-width:200px;text-align:center">
-               <img src="${sigUrl}${sigUrl.includes('?')?'&':'?'}t=${Date.now()}" style="max-width:240px;max-height:120px;display:block;margin:0 auto"
+          ? `<div style="background:#f8f9fa;border:2px dashed #dee2e6;border-radius:10px;padding:16px;display:inline-block;margin-bottom:10px;min-width:240px;text-align:center">
+               <img src="${sigUrl}" style="max-width:300px;max-height:140px;display:block;margin:0 auto"
                  onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-               <div style="display:none;color:var(--red);font-size:12px;padding:8px">โหลดรูปไม่ได้ — ลองอัปโหลดใหม่</div>
+               <div style="display:none;color:var(--red);font-size:12px;padding:8px">โหลดรูปไม่ได้ - ลองอัปโหลดใหม่</div>
              </div>
              <div style="display:flex;gap:8px;margin-top:6px">
                ${hasRole('admin') ? `<button class="btn btn-danger btn-sm" onclick="clearSignature()">🗑 ลบลายเซ็น</button>` : ''}
              </div>`
           : '<div class="info-box yellow">ยังไม่มีลายเซ็น</div>'}
       </div>
-
       <div class="form-group">
         <label class="form-label">อัปโหลดลายเซ็นใหม่ (PNG แนะนำ พื้นโปร่งใส)</label>
         <div class="photo-zone" onclick="document.getElementById('sig-file').click()">
@@ -1724,11 +1833,11 @@ async function settingsSignature(el) {
         <input type="file" id="sig-file" accept="image/*" style="display:none" onchange="previewSig(this)">
         <div id="sig-preview" style="margin-top:8px"></div>
       </div>
-
       <button class="btn btn-primary" onclick="doUploadSignature()">อัปโหลดลายเซ็น</button>
     </div>
   `;
 }
+
 
 function previewSig(input) {
   if (!input.files[0]) return;
