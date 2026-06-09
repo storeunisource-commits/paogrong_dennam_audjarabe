@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ตรวจสอบการเป่ากรอง เดนน้ำ อัดจารบี | SWJ</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+/* === Sidebar logo-box override === */
+.logo-box {
+  background: rgba(255,255,255,0.12) !important;
+  border: 1.5px solid rgba(255,255,255,0.22) !important;
+  border-radius: 10px !important;
+  color: #fff !important;
+  font-size: 13px !important;
+}
+.logo-box img {
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}
+/* === Nav items — ไอคอน emoji ไม่มีกล่องรอบ === */
+.nav-item { letter-spacing: 0.01em; }
+.nav-item.active { border-left-color: #90cdf4 !important; }
+/* === Sidebar header พื้นหลังเข้มขึ้นเล็กน้อย === */
+.sidebar-header { background: rgba(0,0,0,0.18); }
+</style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:#555">กำลังโหลด...</div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Login Page -->
+<div id="login-page" style="display:none">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="Logo.png" class="login-logo-img"
+           onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='inline-flex'">
+      <div id="logo-fallback" class="login-logo-fallback" style="display:none">SWJ</div>
+      <div class="login-title">ตรวจสอบการเป่ากรอง<br>เดนน้ำ อัดจารบี</div>
+      <div class="login-subtitle">บริษัท ส.ศิวโรจน์ ขนส่ง จำกัด</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label required">ชื่อผู้ใช้</label>
+      <input type="text" id="login-username" class="form-control" placeholder="กรอก username" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label required">รหัสผ่าน</label>
+      <input type="password" id="login-password" class="form-control" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+    </div>
+    <div id="login-error" style="color:#e53e3e;font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:#a0aec0">v2.0 · 2026</div>
+    <div style="text-align:center;margin-top:6px;font-size:10px;color:#cbd5e0">ByKhunMeen</div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div id="app" style="display:none">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-box">
+          <img src="Logo.png" alt="SWJ" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff">SWJ</span>
+        </div>
+        <div>
+          <div class="sidebar-title">เป่ากรอง เดนน้ำ<br>อัดจารบี</div>
+          <div class="sidebar-subtitle">SWJ Transport</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="name" id="sb-name">-</div>
+      <div class="role" id="sb-role">-</div>
+    </div>
+    <nav id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="doLogout()">🚪 ออกจากระบบ</button>
+      <div style="text-align:center;margin-top:8px;font-size:10px;color:rgba(255,255,255,.3)">ByKhunMeen</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="topbar">
+      <div class="topbar-left">
+        <button class="burger" onclick="toggleSidebar()">☰</button>
+        <span class="page-title" id="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-right" style="position:relative">
+        <button class="notif-btn" onclick="toggleNotif()">
+          🔔<span class="notif-badge" id="notif-badge" style="display:none">0</span>
+        </button>
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-header">
+            <span>การแจ้งเตือน</span>
+            <button class="btn-ghost" onclick="dismissAllNotif()" style="font-size:11px;padding:2px 6px">ปิดทั้งหมด</button>
+          </div>
+          <div id="notif-list"><div class="notif-empty">ไม่มีการแจ้งเตือน</div></div>
+        </div>
+      </div>
+    </div>
+    <div id="content"></div>
+  </div>
+
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+.clasp.json
+.clasprc.json
+node_modules/
+*.log
+*.xlsx
+*.pdf
+HANDOFF.md
+MASTER_PROMPT.md
+AGENTS.md
+CLAUDE.md
+codex.md
+antigravity.md
+Task.md
+SETUP_GUIDE.md
+TEST_CHECKLIST.md
+appsscript.json
+
