@@ -1277,10 +1277,10 @@ async function renderVioHistory(container) {
         </select>
         <label>เดือน</label>
         <input type="number" id="vh-month" class="form-control" style="width:60px"
-               value="${now.getMonth()+1}" min="1" max="12">
+               value="" placeholder="${now.getMonth()+1}" min="1" max="12">
         <label>ปี</label>
         <input type="number" id="vh-year" class="form-control" style="width:75px"
-               value="${now.getFullYear()}">
+               value="" placeholder="${now.getFullYear()}">
         <button class="btn btn-primary btn-sm" onclick="loadVioHistory()">🔍 ค้นหา</button>
       </div>
       <div id="vh-results"><div class="empty"><div class="spinner"></div></div></div>
