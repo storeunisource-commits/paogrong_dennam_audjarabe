@@ -33,15 +33,16 @@ const S = {
 // ============================================================
 const NAV_ITEMS = [
   { id:'dashboard',       label:'📊 Dashboard',      minRole:'viewer'    },
-  { id:'pm-form',         label:'🔧 บันทึก PM',      minRole:'operation' },
-  { id:'violation-form',  label:'⚠️ ใบเตือน',        minRole:'operation' },
-  { id:'approve',         label:'✅ อนุมัติ/รับทราบ',  minRole:'operation' },
-  { id:'history',         label:'📋 ประวัติ PM',     minRole:'operation' },
-  { id:'vio-history',     label:'📁 ประวัติใบเตือน', minRole:'operation' },
-  { id:'good-employees',  label:'⭐ พนักงานทำดี',    minRole:'operation' },
-  { id:'line-notify',     label:'📣 แจ้งกลุ่มไลน์', minRole:'operation' },
-  { id:'warned-employees',label:'⚠️ พนักงานโดนเตือน', minRole:'operation' },
-  { id:'track-status',    label:'🔍 ติดตามสถานะ',   minRole:'operation' },
+  { id:'pm-form',         label:'🔧 บันทึก PM',      minRole:'operation', group:'การบันทึก ติดตาม อนุมัติ' },
+  { id:'violation-form',  label:'⚠️ ใบเตือน',        minRole:'operation', group:'การบันทึก ติดตาม อนุมัติ' },
+  { id:'approve',         label:'✅ อนุมัติรับทราบ',  minRole:'operation', group:'การบันทึก ติดตาม อนุมัติ' },
+  { id:'track-status',    label:'🔍 ติดตามสถานะ',   minRole:'operation', group:'การบันทึก ติดตาม อนุมัติ' },
+  { id:'line-notify',     label:'📣 แจ้งกลุ่มไลน์', minRole:'operation', group:'การบันทึก ติดตาม อนุมัติ' },
+  { id:'history',         label:'📋 ประวัติ PM',     minRole:'operation', group:'ประวัติ' },
+  { id:'vio-history',     label:'📁 ประวัติใบเตือน', minRole:'operation', group:'ประวัติ' },
+  { id:'stopped-history', label:'⛔ ประวัติรถที่โดนสั่งหยุด', minRole:'operation', group:'ประวัติ' },
+  { id:'good-employees',  label:'⭐ พนักงานทำดี',    minRole:'operation', group:'ผลประเมินพนักงานขับรถ' },
+  { id:'warned-employees',label:'⚠️ พนักงานโดนเตือน', minRole:'operation', group:'ผลประเมินพนักงานขับรถ' },
   { id:'settings',        label:'⚙️ ตั้งค่า',        minRole:'operation' },
 ];
 
@@ -206,13 +207,27 @@ function injectTopbarLogo() {
 function renderNav() {
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = '';
-  NAV_ITEMS.filter(item => hasRole(item.minRole)).forEach(item => {
+  const visible = NAV_ITEMS.filter(item => hasRole(item.minRole));
+  const makeBtn = item => {
     const btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.page = item.id;
     btn.textContent = item.label;
     btn.onclick = () => navigateTo(item.id);
-    nav.appendChild(btn);
+    return btn;
+  };
+  visible.filter(item => !item.group).forEach(item => nav.appendChild(makeBtn(item)));
+  ['การบันทึก ติดตาม อนุมัติ','ประวัติ','ผลประเมินพนักงานขับรถ'].forEach(group => {
+    const items = visible.filter(item => item.group === group);
+    if (!items.length) return;
+    const details = document.createElement('details');
+    details.className = 'nav-group';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = group;
+    details.appendChild(summary);
+    items.forEach(item => details.appendChild(makeBtn(item)));
+    nav.appendChild(details);
   });
 }
 
@@ -240,6 +255,7 @@ async function renderPage(page) {
     case 'approve':        await renderApprove(content);        break;
     case 'history':        await renderHistory(content);        break;
     case 'vio-history':    await renderVioHistory(content);     break;
+    case 'stopped-history': await renderStoppedHistory(content); break;
     case 'good-employees': await renderGoodEmployees(content);  break;
     case 'warned-employees': await renderWarnedEmployees(content); break;
     case 'line-notify':    await renderLineNotify(content);     break;
@@ -472,8 +488,8 @@ async function showCardDetail(cardType) {
       <td>${item.truckNumber || '-'}</td>
       <td>${item.type || '-'}</td>
       <td>${item.weekLabel || item.round || '-'}</td>
-      <td>${item.status || item.docStatus || '-'}</td>
-      <td style="font-size:11px">${fmtDT(item.createdAt)}</td>
+      <td>${cardType === 'late' ? (item.dueRule || 'เกินกำหนดตามปฏิทิน') : (item.status || item.docStatus || '-')}</td>
+      <td style="font-size:11px">${fmtDT(cardType === 'late' ? (item.dueDate || item.createdAt) : item.createdAt)}</td>
       ${isViolationCard ? `<td><button class="btn-ghost btn-sm" onclick="doShowWarning('${item.id}')">ดูหนังสือ</button></td>` : ''}
     </tr>
   `).join('');
@@ -484,9 +500,14 @@ async function showCardDetail(cardType) {
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
+      ${cardType === 'late' ? `
+        <div class="info-box blue" style="margin-bottom:12px">
+          ที่มา: เป่ากรอง/เดรนน้ำ รอบ Week x/1 เกินหลังวันพุธ, Week x/2 เกินหลังวันอาทิตย์, อัดจารบี รอบ1 เกินหลังวันที่ 15 และรอบ2 เกินหลังสิ้นเดือน เฉพาะรายการที่ยังไม่ทำ
+        </div>
+      ` : ''}
       ${!data.length ? '<div class="empty"><p>ไม่มีข้อมูล</p></div>' : `
         <div class="table-wrap"><table>
-          <thead><tr><th>รถ</th><th>ประเภท</th><th>รอบ</th><th>สถานะ</th><th>วันที่</th>${isViolationCard ? '<th></th>' : ''}</tr></thead>
+          <thead><tr><th>รถ</th><th>ประเภท</th><th>รอบ</th><th>${cardType === 'late' ? 'กติกา' : 'สถานะ'}</th><th>${cardType === 'late' ? 'ครบกำหนด' : 'วันที่'}</th>${isViolationCard ? '<th></th>' : ''}</tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
       `}
@@ -519,7 +540,7 @@ async function showTruckDetail(truckNumber) {
         </span></td>
         <td style="font-size:11px">${fmtDT(rec.createdAt)}</td>
         <td>
-          ${photos.length ? `<button class="btn-ghost btn-sm" onclick='openPhotoViewer(${JSON.stringify(photos)})'>📷${photos.length}</button>` : ''}
+          ${photoPreviewButton(photos)}
           <button class="btn-ghost btn-sm" onclick="openComments('maintenance','${rec.id}')">💬</button>
         </td>
       </tr>
@@ -980,6 +1001,9 @@ async function submitViolationForm() {
     showToast('สร้างใบเตือนเรียบร้อย', 'success');
     await loadNotifications();
     await renderViolationForm(document.getElementById('content'));
+    const pdf = await callGAS('getWarningLetterPdf', S.token, r.id);
+    if (pdf.success && pdf.url) openPdfPreview(pdf.url, 'Preview PDF Draft');
+    else showToast(pdf.error || 'สร้างแล้ว แต่เปิด Preview PDF ไม่ได้', 'warning');
   } else {
     showToast(r.error, 'error');
   }
@@ -1044,7 +1068,7 @@ function mkVioCard(v) {
     actions = `
       <div style="margin-top:8px;font-size:12px;color:var(--green)">
         ✅ รับทราบ ${fmtDT(v.driverAckAt)}
-        ${photos.length ? `<button class="btn-ghost btn-sm" onclick='openPhotoViewer(${JSON.stringify(photos)})'>📷 หลักฐาน (${photos.length})</button>` : ''}
+        ${photoPreviewButton(photos, 'หลักฐาน')}
       </div>
       <div class="vc-actions" style="margin-top:6px">
         <button class="btn btn-outline btn-sm" onclick="doShowWarning('${v.id}')">🖨 ดู/พิมพ์หนังสือ</button>
@@ -1098,6 +1122,26 @@ async function doShowWarning(violationId) {
   if (!r.url || !/^https?:\/\//.test(r.url)) { if (popup) popup.close(); showToast('ไม่พบ PDF', 'error'); return; }
   if (popup) popup.location.href = r.url;
   else window.open(r.url, '_blank');
+}
+
+function openPdfPreview(url, title = 'PDF') {
+  if (!url || !/^https?:\/\//.test(url)) {
+    showToast('ไม่พบ PDF', 'error');
+    return;
+  }
+  openModal(`
+    <div class="modal-header">
+      <span class="modal-title">📄 ${title}</span>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" style="padding:0;height:75vh">
+      <iframe src="${url}" style="width:100%;height:100%;border:0;border-radius:0 0 8px 8px"></iframe>
+    </div>
+    <div class="modal-footer">
+      <a class="btn btn-outline" href="${url}" target="_blank">เปิดในแท็บใหม่</a>
+      <button class="btn btn-primary" onclick="closeModal()">ปิด</button>
+    </div>
+  `, 'modal-xl');
 }
 
 
@@ -1209,15 +1253,12 @@ async function loadHistory() {
   el.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>รถ</th><th>คนขับ</th><th>ประเภท</th><th>รอบ</th><th>สถานะ</th><th>วันที่</th><th>รูป/หมายเหตุ</th><th>ไลน์</th></tr></thead>
+        <thead><tr><th>รถ</th><th>คนขับ</th><th>ประเภท</th><th>รอบ</th><th>สถานะ</th><th>วันที่</th><th>รูป</th><th>เอกสาร</th><th>หมายเหตุ</th></tr></thead>
         <tbody>
           ${data.map(rec => {
-            const photos    = safePhotoUrls(rec.photoUrls);
+            const photos    = safePhotoUrls(rec.photoUrls || rec.photo_urls);
             const empNick   = rec.employee?.nickname || rec.employeeId || '-';
-            const notified  = rec.notifiedLine === true || rec.notifiedLine === 'true';
-            const lineBtn   = notified
-              ? `<button class="btn-ghost btn-sm" disabled style="color:var(--green);opacity:.7">✅แจ้งแล้ว</button>`
-              : `<button id="nline-${rec.id}" class="btn-ghost btn-sm" onclick="notifyLine('${rec.id}',${photos.length > 0})">📣แจ้ง</button>`;
+            const docUrl = rec.pdfUrl || rec.documentUrl || rec.warningPdfUrl || '';
             return `
               <tr>
                 <td style="font-weight:600">${rec.truckNumber}</td>
@@ -1225,13 +1266,13 @@ async function loadHistory() {
                 <td>${rec.type}</td>
                 <td>${rec.weekLabel || '-'}</td>
                 <td><span class="status-badge" style="background:${STATUS_COLOR[rec.status]||'#a0aec0'};color:#fff;font-size:11px">${rec.status}</span></td>
-                <td style="font-size:11px;white-space:nowrap">${fmtDT(rec.createdAt)}</td>
+                <td style="font-size:11px;white-space:nowrap">${fmtDT(rec.logDate || rec.createdAt)}</td>
+                <td style="white-space:nowrap">${photoPreviewButton(photos)}</td>
+                <td style="white-space:nowrap">${docLinkButton(docUrl, 'เปิด')}</td>
                 <td style="white-space:nowrap">
-                  ${photos.length ? `<button class="btn-ghost btn-sm" onclick='openPhotoViewer(${JSON.stringify(photos)})'>📷${photos.length}</button>` : ''}
-                  ${rec.notes ? `<span title="${rec.notes}" style="cursor:help">📝</span>` : ''}
+                  ${rec.notes ? `<span title="${rec.notes}" style="cursor:help">📝</span>` : '-'}
                   <button class="btn-ghost btn-sm" onclick="openComments('maintenance','${rec.id}')">💬</button>
                 </td>
-                <td style="white-space:nowrap">${lineBtn}</td>
               </tr>
             `;
           }).join('')}
@@ -1338,6 +1379,83 @@ async function loadVioHistory() {
                 </td>
               </tr>
             `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ============================================================
+// STOPPED TRUCK HISTORY
+// ============================================================
+async function renderStoppedHistory(container) {
+  await ensureTrucks();
+  const now = new Date();
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-title">⛔ ประวัติรถที่โดนสั่งหยุด</div>
+      <div class="filter-bar">
+        <label>รถ</label>
+        <select id="sh-truck" class="form-control" style="width:auto">
+          <option value="">ทั้งหมด</option>
+          ${S.trucks.map(t=>`<option value="${t.truckNumber}">${t.truckNumber}</option>`).join('')}
+        </select>
+        <label>ประเภท</label>
+        <select id="sh-type" class="form-control" style="width:auto">
+          <option value="">ทั้งหมด</option>
+          <option>เป่ากรอง</option><option>เดรนน้ำ</option><option>อัดจารบี</option>
+        </select>
+        <label>เดือน</label>
+        <input type="number" id="sh-month" class="form-control" style="width:60px" placeholder="${now.getMonth()+1}" min="1" max="12">
+        <label>ปี</label>
+        <input type="number" id="sh-year" class="form-control" style="width:75px" placeholder="${now.getFullYear()}">
+        <button class="btn btn-primary btn-sm" onclick="loadStoppedHistory()">ค้นหา</button>
+      </div>
+      <div id="sh-results"><div class="empty"><div class="spinner"></div></div></div>
+    </div>
+  `;
+  await loadStoppedHistory();
+}
+
+async function loadStoppedHistory() {
+  const el = document.getElementById('sh-results');
+  if (!el) return;
+  el.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  const filters = {
+    truckNumber: document.getElementById('sh-truck')?.value || '',
+    type: document.getElementById('sh-type')?.value || '',
+    month: document.getElementById('sh-month')?.value || '',
+    year: document.getElementById('sh-year')?.value || ''
+  };
+  const r = await callGAS('getStoppedTruckHistory', S.token, filters);
+  if (!r.success) { el.innerHTML = `<div class="empty"><p style="color:var(--red)">${r.error}</p></div>`; return; }
+  const data = r.data || [];
+  if (!data.length) { el.innerHTML = '<div class="empty"><p>ไม่พบประวัติรถที่โดนสั่งหยุด</p></div>'; return; }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>รถ</th><th>พนักงาน</th><th>ประเภท</th><th>รอบ</th><th>ระดับ</th><th>สถานะหยุด</th><th>วันที่</th><th>หลักฐาน</th><th>เอกสาร</th></tr></thead>
+        <tbody>
+          ${data.map(v => {
+            const emp = v.employee?.nickname || v.employeeId || '-';
+            const cleared = v.followupDone === true || v.followupDone === 'true';
+            const photos = safePhotoUrls(v.ackPhotoUrls || v.ack_photo_urls || v.ackPhotoUrl || v.ack_photo_url);
+            const pdf = v.pdfUrl || v.pdf_url || v.pdfAckUrl || v.pdfApprovedUrl || v.pdfPendingUrl || '';
+            return `<tr>
+              <td style="font-weight:700">${v.truckNumber || '-'}</td>
+              <td>${emp}</td>
+              <td>${v.type || '-'}</td>
+              <td>${v.weekLabel || v.round || '-'}</td>
+              <td>${v.punishmentLevel || '-'}</td>
+              <td><span class="status-badge ${cleared ? 'badge-green' : 'badge-red'}">${cleared ? 'เคลียร์แล้ว' : 'ยังหยุดอยู่'}</span></td>
+              <td style="white-space:nowrap">${fmtDT(v.createdAt)}</td>
+              <td>${photoPreviewButton(photos, 'หลักฐาน')}</td>
+              <td style="white-space:nowrap">
+                <button class="btn-ghost btn-sm" onclick="doShowWarning('${v.id}')">ดูหนังสือ</button>
+                ${docLinkButton(pdf, 'PDF')}
+              </td>
+            </tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -2164,11 +2282,32 @@ function fmtDT(iso) {
 
 function safePhotoUrls(raw) {
   if (!raw) return [];
-  const arr = Array.isArray(raw) ? raw : (() => {
-    try { return JSON.parse(raw); } catch { return []; }
-  })();
-  if (!Array.isArray(arr)) return [];
-  return arr.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+  if (Array.isArray(raw)) {
+    return raw.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+  } catch {}
+  return Array.from(new Set(String(raw).match(/https?:\/\/[^\s"',\]\[]+/g) || []));
+}
+
+function photoPreviewButton(photos, label = 'รูป') {
+  const urls = safePhotoUrls(photos);
+  if (!urls.length) return '<span class="muted" title="ไม่มีรูปหลักฐาน">-</span>';
+  return `
+    <button class="btn-ghost btn-sm photo-preview-btn" onclick='openPhotoViewer(${JSON.stringify(urls)})'>
+      ${urls.slice(0, 3).map(u => `<img src="${u}" alt="">`).join('')}
+      <span>${label} ${urls.length}</span>
+    </button>
+  `;
+}
+
+function docLinkButton(url, label = 'เอกสาร') {
+  if (!url || !/^https?:\/\//.test(String(url))) {
+    return '<span class="muted" title="ไม่มีเอกสารเตือน">ไม่มีเอกสาร</span>';
+  }
+  return `<a class="btn-ghost btn-sm" href="${url}" target="_blank">${label}</a>`;
 }
 
 async function filesToBase64(files) {
@@ -2323,13 +2462,12 @@ async function loadLineNotifyHistory() {
   }
   const rows = r.data.map(n => {
     const photos = safePhotoUrls(n.photoUrls || n.photo_urls);
-    const thumbs = photos.slice(0,3).map(u => `<img src="${u}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:4px">`).join('');
     return `<tr>
       <td style="white-space:nowrap">${fmtDT(n.createdAt || n.created_at)}</td>
       <td>${n.type || '-'}</td>
       <td>${n.weekLabel || n.week_label || '-'}</td>
       <td>${n.notes || '-'}</td>
-      <td>${thumbs || '-'}</td>
+      <td>${photoPreviewButton(photos)}</td>
       <td>${n.createdBy || n.created_by || '-'}</td>
     </tr>`;
   }).join('');
@@ -2376,6 +2514,7 @@ async function renderTrackStatus(container) {
           </select>
         </div>
         <button class="btn btn-primary" onclick="loadTrackStatus()">🔍 ค้นหา</button>
+        <button class="btn btn-outline" onclick="openBulkUpdateStatusModal()">อัปเดตทั้งหมด</button>
       </div>
     </div>
     <div id="ts-result">
@@ -2425,17 +2564,17 @@ async function loadTrackStatus() {
   const rows = res.data.map((log, i) => {
     const sc = statusColor[log.status] || '#718096';
     const photos = safePhotoUrls(log.photoUrls || log.photo_urls);
-    const thumbs = photos.slice(0,2).map(u => `<img src="${u}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:2px">`).join('');
+    const locked = (log.status === 'ทำแล้ว' || log.status === 'ทำหลังเตือน') && !hasRole('manager');
     return `<tr>
       <td style="font-weight:600">${log.truckNumber || log.truck_number || '-'}</td>
       <td>${log.type || '-'}</td>
       <td>${log.weekLabel || log.week_label || '-'}</td>
       <td><span style="color:${sc};font-weight:600">${log.status || '-'}</span></td>
-      <td>${thumbs || '-'}</td>
+      <td>${photoPreviewButton(photos)}</td>
       <td style="white-space:nowrap">${fmtDT(log.updatedAt || log.updated_at || log.createdAt || log.created_at)}</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick="openUpdateStatusModal(${i})">
-          ✏️ อัปเดต
+        <button class="btn btn-sm btn-outline" ${locked ? 'disabled title="รายการทำแล้ว แก้ไขได้เฉพาะ Manager/Admin"' : ''} onclick="openUpdateStatusModal(${i})">
+          อัปเดต
         </button>
       </td>
     </tr>`;
@@ -2443,6 +2582,9 @@ async function loadTrackStatus() {
 
   result.innerHTML = `
     <div style="overflow-x:auto">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button class="btn btn-primary btn-sm" onclick="openBulkUpdateStatusModal()">อัปเดตทั้งหมด</button>
+      </div>
       <table class="data-table">
         <thead><tr>
           <th>รถ</th><th>หัวข้อ</th><th>Week/รอบ</th><th>สถานะ</th><th>รูป</th><th>อัปเดตล่าสุด</th><th></th>
@@ -2535,5 +2677,65 @@ async function submitTrackUpdate(logId) {
     showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
   } finally {
     showLoading(false);
+  }
+}
+
+function openBulkUpdateStatusModal() {
+  const logs = (window._tsLogs || []).filter(log => {
+    const done = log.status === 'ทำแล้ว' || log.status === 'ทำหลังเตือน';
+    return !done || hasRole('manager');
+  });
+  if (!logs.length) {
+    showToast('ไม่มีรายการที่อัปเดตได้', 'info');
+    return;
+  }
+  openModal(`
+    <div class="modal-header">
+      <span class="modal-title">อัปเดตทั้งหมด (${logs.length} รายการ)</span>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="bulk-update-list">
+        ${logs.map((log, i) => `
+          <div class="bulk-update-row">
+            <div class="bulk-update-meta">
+              <strong>${log.truckNumber || log.truck_number || '-'}</strong>
+              <span>${log.type || '-'} · ${log.weekLabel || log.week_label || '-'}</span>
+            </div>
+            <select class="form-control bulk-status" data-id="${log.id}">
+              <option value="ยังไม่ได้ทำ" ${log.status==='ยังไม่ได้ทำ'?'selected':''}>ยังไม่ได้ทำ</option>
+              <option value="โทรแจ้งแล้วรับทราบ" ${log.status==='โทรแจ้งแล้วรับทราบ'?'selected':''}>โทรแจ้งแล้วรับทราบ</option>
+              <option value="ทำแล้ว" ${log.status==='ทำแล้ว'?'selected':''}>ทำแล้ว</option>
+            </select>
+            <input class="form-control bulk-note" data-id="${log.id}" placeholder="หมายเหตุ">
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitBulkTrackUpdate()">บันทึกทั้งหมด</button>
+    </div>
+  `, 'modal-xl');
+}
+
+async function submitBulkTrackUpdate() {
+  const updates = Array.from(document.querySelectorAll('.bulk-status')).map(sel => {
+    const id = sel.dataset.id;
+    const note = document.querySelector(`.bulk-note[data-id="${id}"]`)?.value.trim() || '';
+    return { id, status: sel.value, notes: note };
+  });
+  if (!updates.length) return;
+  showLoading(true);
+  const r = await callGAS('updateMaintenanceStatusesBulk', S.token, updates);
+  showLoading(false);
+  if (r.success) {
+    showToast(`อัปเดต ${r.updatedCount || updates.length} รายการ`, 'success');
+    closeModal();
+    await loadTrackStatus();
+    await loadNotifications();
+  } else {
+    const msg = r.errors?.length ? r.errors.map(e => e.error).join(', ') : r.error;
+    showToast(msg || 'อัปเดตไม่สำเร็จ', 'error');
   }
 }
