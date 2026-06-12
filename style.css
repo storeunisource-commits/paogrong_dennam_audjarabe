@@ -178,9 +178,11 @@ textarea.form-control{resize:vertical;min-height:80px}
 .photo-preview-btn img{width:30px;height:30px;object-fit:cover;border-radius:4px;border:1px solid var(--border)}
 .muted{color:var(--muted);font-size:12px}
 .bulk-update-list{display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow:auto}
-.bulk-update-row{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(150px,.8fr) minmax(200px,1fr);gap:8px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:8px}
+.bulk-update-row{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(150px,.8fr) minmax(180px,1fr) minmax(160px,1fr);gap:8px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:8px}
 .bulk-update-meta{display:flex;flex-direction:column;gap:2px}
 .bulk-update-meta span{font-size:12px;color:var(--muted)}
+.bulk-photo-cell{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.bulk-photo-preview{display:flex;flex-wrap:wrap;gap:4px;min-height:32px}
 .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1}
 .modal-body{padding:20px}
 .modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}

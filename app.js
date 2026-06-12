@@ -316,6 +316,7 @@ async function renderDashboard(container) {
               <strong>${v.truckNumber}</strong>
               <span>${v.type || '-'}</span>
               <small>${v.weekLabel || '-'} · ระดับ ${v.punishmentLevel || '-'}</small>
+              <small>${v.violationTopic || v.reason || ''}</small>
             </button>
           `).join('')}
         </div>
@@ -425,7 +426,8 @@ function renderTruckRow(row) {
   const fw   = row.filterByWeek || {};
   const dw   = row.drainByWeek  || {};
   const gw   = row.greaseByWeek || {};
-  const stopBadge = row.isStopped ? '<span class="status-badge badge-red" style="margin-left:4px">หยุดรถ</span>' : '';
+  const stopTitle = safeText((row.stopReasons || row.stop_reasons || []).join ? (row.stopReasons || row.stop_reasons || []).join('\n') : '');
+  const stopBadge = row.isStopped ? `<span class="status-badge badge-red" style="margin-left:4px" title="${stopTitle || 'หยุดรถจากใบเตือน'}">หยุดรถ</span>` : '';
 
   const dot = (st) => {
     const cls = WDOT_CLASS[st] || 'wdot-empty';
@@ -445,6 +447,15 @@ function renderTruckRow(row) {
       <td class="week-cell">${dot(gw['รอบ2']?.status)}</td>
     </tr>
   `;
+}
+
+function safeText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 
@@ -1139,6 +1150,7 @@ function openPdfPreview(url, title = 'PDF') {
     </div>
     <div class="modal-footer">
       <a class="btn btn-outline" href="${url}" target="_blank">เปิดในแท็บใหม่</a>
+      <button class="btn btn-outline" onclick="printPdfUrl('${url.replace(/'/g, "\\'")}')">พิมพ์ PDF</button>
       <button class="btn btn-primary" onclick="closeModal()">ปิด</button>
     </div>
   `, 'modal-xl');
@@ -1269,8 +1281,8 @@ async function loadHistory() {
                 <td style="font-size:11px;white-space:nowrap">${fmtDT(rec.logDate || rec.createdAt)}</td>
                 <td style="white-space:nowrap">${photoPreviewButton(photos)}</td>
                 <td style="white-space:nowrap">${docLinkButton(docUrl, 'เปิด')}</td>
-                <td style="white-space:nowrap">
-                  ${rec.notes ? `<span title="${rec.notes}" style="cursor:help">📝</span>` : '-'}
+                <td>
+                  ${rec.notes ? `<span class="note-text">${rec.notes}</span>` : '-'}
                   <button class="btn-ghost btn-sm" onclick="openComments('maintenance','${rec.id}')">💬</button>
                 </td>
               </tr>
@@ -2708,23 +2720,60 @@ function openBulkUpdateStatusModal() {
               <option value="ทำแล้ว" ${log.status==='ทำแล้ว'?'selected':''}>ทำแล้ว</option>
             </select>
             <input class="form-control bulk-note" data-id="${log.id}" placeholder="หมายเหตุ">
+            <div class="bulk-photo-cell">
+              <label class="btn btn-outline btn-sm" style="cursor:pointer">
+                แนบรูป
+                <input type="file" class="bulk-photo" data-id="${log.id}" accept="image/*" multiple style="display:none" onchange="previewBulkTrackPhotos('${log.id}')">
+              </label>
+              <div class="bulk-photo-preview" data-id="${log.id}"></div>
+            </div>
           </div>
         `).join('')}
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-outline" onclick="markAllBulkDone()">ทำแล้วทั้งหมด</button>
       <button class="btn btn-primary" onclick="submitBulkTrackUpdate()">บันทึกทั้งหมด</button>
     </div>
   `, 'modal-xl');
 }
 
+function printPdfUrl(url) {
+  if (!url || !/^https?:\/\//.test(url)) {
+    showToast('ไม่พบ PDF', 'error');
+    return;
+  }
+  const w = window.open(url, '_blank');
+  if (!w) showToast('เบราว์เซอร์บล็อก popup ให้กดเปิดในแท็บใหม่แล้วพิมพ์จากไฟล์ PDF', 'warning');
+}
+
+function previewBulkTrackPhotos(id) {
+  const input = document.querySelector(`.bulk-photo[data-id="${id}"]`);
+  const preview = document.querySelector(`.bulk-photo-preview[data-id="${id}"]`);
+  if (!input || !preview) return;
+  preview.innerHTML = '';
+  Array.from(input.files || []).forEach(f => {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    img.style.cssText = 'width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;margin:4px 4px 0 0';
+    preview.appendChild(img);
+  });
+}
+
+function markAllBulkDone() {
+  document.querySelectorAll('.bulk-status').forEach(sel => { sel.value = 'ทำแล้ว'; });
+}
+
 async function submitBulkTrackUpdate() {
-  const updates = Array.from(document.querySelectorAll('.bulk-status')).map(sel => {
+  const updates = await Promise.all(Array.from(document.querySelectorAll('.bulk-status')).map(async sel => {
     const id = sel.dataset.id;
     const note = document.querySelector(`.bulk-note[data-id="${id}"]`)?.value.trim() || '';
-    return { id, status: sel.value, notes: note };
-  });
+    const photoInput = document.querySelector(`.bulk-photo[data-id="${id}"]`);
+    const files = photoInput ? Array.from(photoInput.files || []) : [];
+    const filesData = files.length ? await filesToBase64(files) : [];
+    return { id, status: sel.value, notes: note, filesData };
+  }));
   if (!updates.length) return;
   showLoading(true);
   const r = await callGAS('updateMaintenanceStatusesBulk', S.token, updates);
