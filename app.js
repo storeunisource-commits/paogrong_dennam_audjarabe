@@ -400,9 +400,10 @@ async function loadDashGoodEmp() {
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       ${top5.map((emp, i) => `
         <div style="background:var(--bg2,#f7f9fc);border-radius:10px;padding:10px 14px;min-width:120px;cursor:pointer;border:1.5px solid ${i===0?'#f6c90e':'#e2e8f0'};transition:box-shadow .15s"
-             onclick="showGoodEmpDetail('${emp.employeeId}')">
+             onclick="showGoodEmpDetail('${emp.employeeId}', '${emp.truckNumber || ''}')">
           <div style="font-size:16px">${['🥇','🥈','🥉','4️⃣','5️⃣'][i]}</div>
-          <div style="font-weight:700;font-size:13px">${emp.nickname}</div>
+          <div style="font-weight:700;font-size:13px">${emp.truckNumber || '-'}</div>
+          <div style="font-size:11px;color:#333">${emp.nickname || '-'}</div>
           <div style="font-size:11px;color:#718096">${emp.streakDays === 999 ? 'ไม่เคยโดน' : emp.streakDays + ' วัน'}</div>
           <div style="font-size:11px;color:#4a9d5f">PM ${emp.pmCount} งาน</div>
         </div>
@@ -1140,17 +1141,19 @@ function openPdfPreview(url, title = 'PDF') {
     showToast('ไม่พบ PDF', 'error');
     return;
   }
+  const previewUrl = drivePreviewUrl(url);
+  const viewUrl = driveViewUrl(url);
   openModal(`
     <div class="modal-header">
       <span class="modal-title">📄 ${title}</span>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body" style="padding:0;height:75vh">
-      <iframe src="${url}" style="width:100%;height:100%;border:0;border-radius:0 0 8px 8px"></iframe>
+      <iframe src="${previewUrl}" style="width:100%;height:100%;border:0;border-radius:0 0 8px 8px"></iframe>
     </div>
     <div class="modal-footer">
-      <a class="btn btn-outline" href="${url}" target="_blank">เปิดในแท็บใหม่</a>
-      <button class="btn btn-outline" onclick="printPdfUrl('${url.replace(/'/g, "\\'")}')">พิมพ์ PDF</button>
+      <a class="btn btn-outline" href="${viewUrl}" target="_blank">เปิดในแท็บใหม่</a>
+      <button class="btn btn-outline" onclick="printPdfUrl('${viewUrl.replace(/'/g, "\\'")}')">พิมพ์ PDF</button>
       <button class="btn btn-primary" onclick="closeModal()">ปิด</button>
     </div>
   `, 'modal-xl');
@@ -1509,9 +1512,10 @@ async function renderGoodEmployees(container) {
   const medals = ['🥇','🥈','🥉'];
   const top3Html = data.slice(0, 3).map((emp, i) => `
     <div style="flex:1;min-width:160px;background:${i===0?'#fffbea':'#f7f9fc'};border:2px solid ${i===0?'#f6c90e':'#e2e8f0'};border-radius:14px;padding:18px 16px;text-align:center;cursor:pointer"
-         onclick="showGoodEmpDetail('${emp.employeeId}')">
+         onclick="showGoodEmpDetail('${emp.employeeId}', '${emp.truckNumber || ''}')">
       <div style="font-size:32px">${medals[i] || (i+1)+'.'}</div>
-      <div style="font-size:16px;font-weight:700;margin-top:6px">${emp.nickname}</div>
+      <div style="font-size:16px;font-weight:700;margin-top:6px">${emp.truckNumber || '-'}</div>
+      <div style="font-size:13px;color:#333;margin-top:2px">${emp.nickname || '-'}</div>
       <div style="font-size:12px;color:#666;margin-top:2px">${emp.fullName}</div>
       <div style="margin-top:8px;font-size:13px;color:${emp.streakDays===999?'#4a9d5f':'#2d7dd2'};font-weight:600">
         ${emp.streakDays === 999 ? 'ไม่เคยมีใบเตือน' : '🔥 ' + emp.streakDays + ' วัน'}
@@ -1521,9 +1525,10 @@ async function renderGoodEmployees(container) {
   `).join('');
 
   const tableHtml = data.map((emp, i) => `
-    <tr style="cursor:pointer" onclick="showGoodEmpDetail('${emp.employeeId}')">
+    <tr style="cursor:pointer" onclick="showGoodEmpDetail('${emp.employeeId}', '${emp.truckNumber || ''}')">
       <td style="text-align:center;font-size:15px">${medals[i] || (i+1)}</td>
-      <td style="font-weight:600">${emp.nickname}</td>
+      <td style="font-weight:600">${emp.truckNumber || '-'}</td>
+      <td style="font-size:12px;color:#333">${emp.nickname || '-'}</td>
       <td style="font-size:12px;color:#666">${emp.fullName}</td>
       <td style="text-align:center;font-weight:600;color:${emp.streakDays===999?'#4a9d5f':'#2d7dd2'}">
         ${emp.streakDays === 999 ? 'ไม่เคยโดน' : emp.streakDays + ' วัน'}
@@ -1540,7 +1545,7 @@ async function renderGoodEmployees(container) {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>ชื่อเล่น</th><th>ชื่อ-สกุล</th><th>Streak</th><th>PM (3 เดือน)</th><th>ใบเตือนล่าสุด</th></tr>
+          <tr><th>#</th><th>เบอร์รถ</th><th>ชื่อเล่น</th><th>ชื่อ-สกุล</th><th>Streak</th><th>PM (3 เดือน)</th><th>ใบเตือนล่าสุด</th></tr>
         </thead>
         <tbody>${tableHtml}</tbody>
       </table>
@@ -1549,7 +1554,7 @@ async function renderGoodEmployees(container) {
   cntEl.style.display = '';
 }
 
-async function showGoodEmpDetail(employeeId) {
+async function showGoodEmpDetail(employeeId, truckNumber = '') {
   const modal = document.getElementById('modal-container');
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -1569,7 +1574,7 @@ async function showGoodEmpDetail(employeeId) {
 
   const [empR, vioR] = await Promise.all([
     callGAS('getEmployees', S.token),
-    callGAS('getViolationLogs', S.token, { employeeId })
+    callGAS('getViolationLogs', S.token, truckNumber ? { truckNumber } : { employeeId })
   ]);
 
   const body = document.getElementById('ge-detail-body');
@@ -1586,6 +1591,7 @@ async function showGoodEmpDetail(employeeId) {
   body.innerHTML = `
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:40px">👷</div>
+      ${truckNumber ? `<div style="font-size:20px;font-weight:800;color:#1a365d">${truckNumber}</div>` : ''}
       <div style="font-size:18px;font-weight:700">${emp.nickname}</div>
       <div style="font-size:13px;color:#666">${emp.fullName}</div>
       <div style="font-size:11px;color:#999">${emp.employeeId}</div>
@@ -2196,7 +2202,8 @@ async function submitComment(refType, refId) {
 // ============================================================
 function openPhotoViewer(urls) {
   if (!urls || !urls.length) return;
-  window._pvUrls = urls;
+  window._pvUrls = safePhotoUrls(urls);
+  if (!window._pvUrls.length) return;
   window._pvIdx  = 0;
   _renderPhotoViewer();
 }
@@ -2210,7 +2217,7 @@ function _renderPhotoViewer() {
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body" style="text-align:center">
-      <img src="${urls[idx]}" style="max-width:100%;max-height:65vh;border-radius:6px;object-fit:contain"
+      <img src="${photoThumbUrl(urls[idx], 1600)}" style="max-width:100%;max-height:65vh;border-radius:6px;object-fit:contain"
            onerror="this.alt='โหลดรูปไม่ได้';this.style.padding='20px'">
       ${urls.length > 1 ? `
         <div style="margin-top:10px;display:flex;justify-content:center;align-items:center;gap:12px">
@@ -2220,7 +2227,7 @@ function _renderPhotoViewer() {
         </div>
       ` : ''}
       <div style="margin-top:8px">
-        <a class="btn btn-outline btn-sm" href="${urls[idx]}" target="_blank">🔗 เปิดในแท็บใหม่</a>
+        <a class="btn btn-outline btn-sm" href="${driveViewUrl(urls[idx])}" target="_blank">🔗 เปิดในแท็บใหม่</a>
       </div>
     </div>
   `, 'modal-lg');
@@ -2294,14 +2301,39 @@ function fmtDT(iso) {
 
 function safePhotoUrls(raw) {
   if (!raw) return [];
+  const normalize = u => {
+    if (!u || typeof u !== 'string' || !u.startsWith('http')) return '';
+    return u.replace(/&amp;/g, '&').trim();
+  };
   if (Array.isArray(raw)) {
-    return raw.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+    return raw.map(normalize).filter(Boolean);
   }
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+    if (Array.isArray(parsed)) return parsed.map(normalize).filter(Boolean);
   } catch {}
-  return Array.from(new Set(String(raw).match(/https?:\/\/[^\s"',\]\[]+/g) || []));
+  return Array.from(new Set((String(raw).match(/https?:\/\/[^\s"',\]\[]+/g) || []).map(normalize).filter(Boolean)));
+}
+
+function driveFileIdFromUrl(url) {
+  const s = String(url || '');
+  const m = s.match(/[?&]id=([^&]+)/) || s.match(/\/d\/([^/]+)/);
+  return m ? m[1] : '';
+}
+
+function driveViewUrl(url) {
+  const id = driveFileIdFromUrl(url);
+  return id ? `https://drive.google.com/file/d/${id}/view` : url;
+}
+
+function drivePreviewUrl(url) {
+  const id = driveFileIdFromUrl(url);
+  return id ? `https://drive.google.com/file/d/${id}/preview` : url;
+}
+
+function photoThumbUrl(url, size = 220) {
+  const id = driveFileIdFromUrl(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${size}` : url;
 }
 
 function photoPreviewButton(photos, label = 'รูป') {
@@ -2309,7 +2341,7 @@ function photoPreviewButton(photos, label = 'รูป') {
   if (!urls.length) return '<span class="muted" title="ไม่มีรูปหลักฐาน">-</span>';
   return `
     <button class="btn-ghost btn-sm photo-preview-btn" onclick='openPhotoViewer(${JSON.stringify(urls)})'>
-      ${urls.slice(0, 3).map(u => `<img src="${u}" alt="">`).join('')}
+      ${urls.slice(0, 3).map(u => `<img src="${photoThumbUrl(u, 120)}" alt="">`).join('')}
       <span>${label} ${urls.length}</span>
     </button>
   `;
@@ -2744,7 +2776,7 @@ function printPdfUrl(url) {
     showToast('ไม่พบ PDF', 'error');
     return;
   }
-  const w = window.open(url, '_blank');
+  const w = window.open(driveViewUrl(url), '_blank', 'noopener');
   if (!w) showToast('เบราว์เซอร์บล็อก popup ให้กดเปิดในแท็บใหม่แล้วพิมพ์จากไฟล์ PDF', 'warning');
 }
 
